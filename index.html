@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Monday Night Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#14231C;
+    --bg-raised:#1A2B22;
+    --cream:#F3EEE2;
+    --cream-dim:#B9C2B7;
+    --amber:#E8A33D;
+    --amber-dim:#8A6A34;
+    --red:#C1443B;
+    --line:rgba(243,238,226,0.14);
+    --line-strong:rgba(243,238,226,0.28);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--cream);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 80px;}
+
+  header.marquee{
+    border-bottom:2px solid var(--amber);
+    padding-bottom:18px;
+    margin-bottom:22px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  header.marquee h1{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:clamp(28px,5vw,40px);
+    margin:0;
+    letter-spacing:0.3px;
+    line-height:1;
+  }
+  header.marquee .season{
+    font-size:14px;
+    color:var(--amber);
+    font-family:'Oswald',sans-serif;
+    font-weight:500;
+    letter-spacing:0.4px;
+  }
+
+  nav.tabs{
+    display:flex;
+    gap:2px;
+    margin-bottom:24px;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    overflow:hidden;
+  }
+  nav.tabs button{
+    flex:1;
+    background:transparent;
+    border:none;
+    color:var(--cream-dim);
+    font-family:'Oswald',sans-serif;
+    font-size:15px;
+    font-weight:500;
+    letter-spacing:0.3px;
+    padding:12px 8px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  nav.tabs button + button{border-left:1px solid var(--line-strong);}
+  nav.tabs button.active{background:var(--amber);color:#1A1400;}
+  nav.tabs button:not(.active):hover{background:var(--bg-raised);color:var(--cream);}
+
+  section{display:none;}
+  section.active{display:block;}
+
+  .panel{
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:20px;
+    margin-bottom:18px;
+  }
+
+  h2{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:20px;
+    margin:0 0 4px;
+  }
+  .sub{color:var(--cream-dim);font-size:14px;margin:0 0 18px;}
+
+  .week-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:10px;}
+  .week-nav button{
+    background:none;border:1px solid var(--line-strong);color:var(--cream);
+    width:34px;height:34px;border-radius:6px;cursor:pointer;font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .week-nav button:hover{background:var(--bg);}
+  .week-nav button:disabled{opacity:0.3;cursor:default;}
+  .week-title{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:18px;text-align:center;flex:1;
+  }
+  .week-status{font-size:12px;color:var(--cream-dim);display:block;margin-top:2px;font-family:'Inter',sans-serif;font-weight:400;}
+  .week-status.final{color:var(--red);}
+  .week-status.open{color:var(--amber);}
+  .week-status.locked{color:var(--amber-dim);}
+  .matchup{
+    text-align:center;font-size:13px;color:var(--cream-dim);
+    margin:-10px 0 18px;font-family:'Oswald',sans-serif;letter-spacing:0.2px;
+  }
+
+  label{display:block;font-size:13px;color:var(--cream-dim);margin-bottom:6px;}
+  select, input[type=text], input[type=number]{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--line-strong);
+    color:var(--cream);
+    border-radius:6px;
+    padding:10px 12px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    margin-bottom:14px;
+  }
+  select:focus, input:focus{outline:2px solid var(--amber);outline-offset:1px;}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+  button.primary{
+    background:var(--amber);
+    color:#1A1400;
+    border:none;
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:15px;
+    letter-spacing:0.3px;
+    padding:12px 18px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{opacity:0.35;cursor:default;}
+
+  button.ghost{
+    background:transparent;
+    border:1px solid var(--line-strong);
+    color:var(--cream);
+    font-family:'Inter',sans-serif;
+    font-size:14px;
+    padding:10px 16px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  button.ghost:hover{background:var(--bg);}
+
+  .pick-confirm{
+    border-left:3px solid var(--amber);
+    padding:10px 14px;
+    background:rgba(232,163,61,0.08);
+    font-size:14px;
+    margin-bottom:16px;
+    border-radius:0 6px 6px 0;
+  }
+
+  ul.roster-status{list-style:none;margin:0;padding:0;}
+  ul.roster-status li{
+    display:flex;justify-content:space-between;
+    padding:9px 0;border-bottom:1px solid var(--line);
+    font-size:14px;
+  }
+  ul.roster-status li:last-child{border-bottom:none;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px;}
+  .dot.in{background:var(--amber);}
+  .dot.out{background:var(--line-strong);}
+
+  table.picks-table, table.standings-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+  }
+  table.picks-table th, table.picks-table td,
+  table.standings-table th, table.standings-table td{
+    text-align:left;
+    padding:9px 8px;
+    border-bottom:1px solid var(--line);
+  }
+  table.picks-table th, table.standings-table th{
+    font-family:'Oswald',sans-serif;font-weight:500;font-size:12px;
+    color:var(--cream-dim);letter-spacing:0.2px;
+  }
+  table.standings-table td.rank{font-family:'Oswald',sans-serif;color:var(--amber);width:28px;}
+  table.standings-table td.pts{font-family:'Oswald',sans-serif;font-weight:600;text-align:right;}
+  table.picks-table td.num, table.standings-table td.num{text-align:right;font-family:'Oswald',sans-serif;}
+  tr.winner-row td{color:var(--amber);}
+
+  .commish-toggle{
+    display:flex;align-items:center;justify-content:space-between;
+    cursor:pointer;user-select:none;
+  }
+  .commish-body{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
+  .checklist{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-bottom:16px;}
+  .checklist label{
+    display:flex;align-items:center;gap:8px;font-size:14px;color:var(--cream);margin:0;
+    padding:6px 0;
+  }
+  .checklist input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--amber);}
+
+  .grid-wrap{overflow-x:auto;margin-top:10px;}
+  table.grid{border-collapse:collapse;font-size:12px;white-space:nowrap;}
+  table.grid th, table.grid td{padding:6px 8px;text-align:center;border-bottom:1px solid var(--line);}
+  table.grid th{font-family:'Oswald',sans-serif;font-weight:500;color:var(--cream-dim);}
+  table.grid td.name{text-align:left;font-family:'Inter',sans-serif;color:var(--cream);position:sticky;left:0;background:var(--bg-raised);}
+  table.grid td.tot{font-family:'Oswald',sans-serif;font-weight:600;color:var(--amber);}
+
+  .empty{color:var(--cream-dim);font-size:14px;padding:20px 0;text-align:center;}
+
+  .roster-edit-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+  .roster-edit-row input{margin:0;flex:1;}
+  .pin-tag{font-size:11px;color:var(--cream-dim);white-space:nowrap;font-family:'Oswald',sans-serif;}
+  .roster-edit-row button.resetPinBtn{
+    background:transparent;border:1px solid var(--line-strong);color:var(--cream-dim);
+    border-radius:6px;padding:0 10px;height:38px;cursor:pointer;font-size:12px;font-family:'Oswald',sans-serif;
+  }
+  .roster-edit-row button.resetPinBtn:hover{color:var(--amber);border-color:var(--amber);}
+  .roster-edit-row button.removePlayerBtn{
+    background:transparent;border:1px solid var(--line-strong);color:var(--cream-dim);
+    border-radius:6px;width:38px;height:38px;cursor:pointer;font-size:16px;
+  }
+  .roster-edit-row button.removePlayerBtn:hover{color:var(--red);border-color:var(--red);}
+
+  .note{font-size:12px;color:var(--cream-dim);margin-top:6px;}
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--amber);color:#1A1400;padding:10px 20px;border-radius:6px;
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:14px;
+    opacity:0;pointer-events:none;transition:opacity .2s ease;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="marquee">
+    <h1>The Monday Night Pool</h1>
+    <span class="season">17 weeks &middot; winner + total score</span>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="week" class="active">This Week</button>
+    <button data-tab="standings">Standings</button>
+    <button data-tab="setup">Setup</button>
+  </nav>
+
+  <section id="tab-week" class="active">
+
+    <div class="panel">
+      <div class="week-nav">
+        <button id="prevWeek">&larr;</button>
+        <div class="week-title" id="weekTitle">Week 1
+          <span class="week-status" id="weekStatus">Picks open</span>
+        </div>
+        <button id="nextWeek">&rarr;</button>
+      </div>
+      <div class="matchup" id="matchupLine"></div>
+
+      <label for="whoAmI">Who are you?</label>
+      <select id="whoAmI"></select>
+
+      <div id="pickArea"></div>
+    </div>
+
+    <div class="panel" id="rosterStatusPanel">
+      <h2>Who's picked</h2>
+      <p class="sub" id="rosterStatusSub">Names show up here once they've submitted &mdash; picks stay hidden until the week is finalized.</p>
+      <ul class="roster-status" id="rosterStatusList"></ul>
+    </div>
+
+    <div class="panel" id="resultsPanel" style="display:none;">
+      <h2 id="resultsTitle">Final result</h2>
+      <p class="sub" id="resultsSub"></p>
+      <div id="resultsTableWrap"></div>
+    </div>
+
+  </section>
+
+  <section id="tab-standings">
+    <div class="panel">
+      <h2>Season standings</h2>
+      <p class="sub">1 point for showing up, 1 for the right winner, 1 more for the closest score &mdash; if you did all three.</p>
+      <div id="standingsWrap"></div>
+    </div>
+    <div class="panel">
+      <h2>Week by week</h2>
+      <p class="sub">Points per player, per week. Blank means the week isn't final yet.</p>
+      <div class="grid-wrap" id="gridWrap"></div>
+    </div>
+  </section>
+
+  <section id="tab-setup">
+    <div class="panel" id="commishPanel">
+      <h2>Commissioner tools</h2>
+      <p class="sub">Matchups, kickoff times, and results. Password-protected &mdash; only you should have this.</p>
+      <div id="commishGate"></div>
+      <div id="commishUnlockedArea" style="display:none;">
+        <div id="poolNameArea"></div>
+        <div id="seasonLengthArea"></div>
+        <div class="week-nav">
+          <button id="commishPrevWeek">&larr;</button>
+          <div class="week-title" id="commishWeekTitle">Week 1</div>
+          <button id="commishNextWeek">&rarr;</button>
+        </div>
+        <div id="commishBody"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Players</h2>
+      <p class="sub">Add everyone in the pool. This list is what fills the "Who are you?" menu &mdash; anyone can add themselves here.</p>
+      <div id="rosterEdit"></div>
+      <button class="ghost" id="addPlayerBtn">+ Add player</button>
+      <p class="note">Everyone who opens this app sees the same players, picks, and standings &mdash; there's no login for this part, so it works on the honor system.</p>
+    </div>
+  </section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ==== Supabase connection ====
+// Fill these in with your own project's values (Supabase dashboard → Settings → API).
+const SUPABASE_URL = 'https://rlvjczgynktlrppxrqbd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsdmpjemd5bmt0bHJwcHhycWJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMzQ0MTgsImV4cCI6MjEwMzcxMDQxOH0.GAqLzwB31sscHRMEtRGKtqBEPMGoqP62mHVmIcGasao';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function kvGet(key){
+  const { data, error } = await sb.from('kv_store').select('value').eq('key', key).maybeSingle();
+  if(error) throw error;
+  return data ? data.value : null;
+}
+
+async function kvSet(key, value){
+  const { error } = await sb.from('kv_store').upsert({ key, value, updated_at: new Date().toISOString() });
+  if(error){ console.error(error); return false; }
+  return true;
+}
+// ==== End Supabase connection ====
+
+let NUM_WEEKS = 17;
+let config = { players: [], label: "The Monday Night Pool", commishPassword: null, numWeeks: 17 };
+let season = {}; // { "1": { picks: {playerId:{winner,score,ts}}, result: {winner,score,attendees:[]}, locked:false } }
+let currentWeek = 1;
+let whoAmI = null;
+let unlockedPlayerId = null;
+let commishWeek = 1;
+let commishUnlocked = false;
+
+const NFL_TEAMS = [
+  "Arizona Cardinals","Atlanta Falcons","Baltimore Ravens","Buffalo Bills",
+  "Carolina Panthers","Chicago Bears","Cincinnati Bengals","Cleveland Browns",
+  "Dallas Cowboys","Denver Broncos","Detroit Lions","Green Bay Packers",
+  "Houston Texans","Indianapolis Colts","Jacksonville Jaguars","Kansas City Chiefs",
+  "Las Vegas Raiders","Los Angeles Chargers","Los Angeles Rams","Miami Dolphins",
+  "Minnesota Vikings","New England Patriots","New Orleans Saints","New York Giants",
+  "New York Jets","Philadelphia Eagles","Pittsburgh Steelers","San Francisco 49ers",
+  "Seattle Seahawks","Tampa Bay Buccaneers","Tennessee Titans","Washington Commanders"
+];
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function emptyWeek(){
+  return { picks:{}, result:null, locked:false, kickoff:null, manualLock:false, teams:["",""] };
+}
+
+function picksLocked(w){
+  const wk = season[w];
+  if(wk.locked) return true;
+  if(wk.manualLock) return true;
+  if(wk.kickoff && Date.now() >= new Date(wk.kickoff).getTime()) return true;
+  return false;
+}
+
+function toDatetimeLocalValue(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function withTimeout(promise, ms){
+  return Promise.race([
+    promise,
+    new Promise((_, reject)=> setTimeout(()=> reject(new Error('storage timeout')), ms))
+  ]);
+}
+
+async function fetchData(){
+  try{
+    const cfgVal = await withTimeout(kvGet('pool-config'), 6000);
+    if(cfgVal){ config = cfgVal; }
+  }catch(e){ console.error('fetch config failed or timed out', e); }
+
+  if(config.commishPassword === undefined) config.commishPassword = null;
+  if(!config.numWeeks) config.numWeeks = 17;
+  NUM_WEEKS = config.numWeeks;
+
+  try{
+    const seasonVal = await withTimeout(kvGet('season-data'), 6000);
+    if(seasonVal){ season = seasonVal; }
+  }catch(e){ console.error('fetch season failed or timed out', e); }
+
+  for(let w=1; w<=NUM_WEEKS; w++){
+    if(!season[w]) season[w] = emptyWeek();
+    if(season[w].kickoff === undefined) season[w].kickoff = null;
+    if(season[w].manualLock === undefined) season[w].manualLock = false;
+    if(!season[w].teams) season[w].teams = ["",""];
+  }
+  config.players.forEach(p=>{ if(p.pin === undefined) p.pin = null; });
+}
+
+async function loadAll(){
+  // Wire up basic navigation immediately, independent of data loading —
+  // so the app is never inert even if the storage fetch below stalls.
+  renderTabsVisibility();
+
+  await fetchData();
+
+  // jump to first non-locked week by default
+  let firstOpen = NUM_WEEKS;
+  for(let w=1; w<=NUM_WEEKS; w++){
+    if(!season[w].locked){ firstOpen = w; break; }
+  }
+  currentWeek = firstOpen;
+
+  render();
+  startAutoRefresh();
+}
+
+function startAutoRefresh(){
+  setInterval(refreshFromStorage, 5000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshFromStorage(); });
+  window.addEventListener('focus', refreshFromStorage);
+}
+
+async function refreshFromStorage(){
+  // Don't yank the rug out from under someone mid-input — skip this cycle,
+  // the next poll (or their own save, which re-renders immediately) will catch up.
+  const active = document.activeElement;
+  const isEditing = active && ['INPUT','SELECT','TEXTAREA'].includes(active.tagName);
+  if(isEditing) return;
+
+  await fetchData();
+  // note: currentWeek / commishWeek are intentionally left alone here,
+  // so a background refresh never yanks anyone to a different week.
+  render();
+}
+
+async function saveConfig(){
+  try{
+    const ok = await withTimeout(kvSet('pool-config', config), 6000);
+    if(!ok){ toast('Save failed — try again'); return false; }
+    return true;
+  }catch(e){ console.error('save config failed', e); toast('Save failed — try again'); return false; }
+}
+
+async function saveSeason(){
+  try{
+    const ok = await withTimeout(kvSet('season-data', season), 6000);
+    if(!ok){ toast('Save failed — try again'); return false; }
+    return true;
+  }catch(e){ console.error('save season failed', e); toast('Save failed — try again'); return false; }
+}
+
+// ---------- scoring ----------
+function computeWeekPoints(w){
+  const wk = season[w];
+  const pts = {};
+  config.players.forEach(p => pts[p.id] = 0);
+  if(!wk.result) return pts;
+
+  const attendees = new Set(wk.result.attendees || []);
+  const actualWinner = (wk.result.winner || '').trim().toLowerCase();
+  const actualScore = wk.result.score;
+
+  let bestDiff = Infinity;
+  const eligibleForBonus = [];
+
+  config.players.forEach(p=>{
+    const pick = wk.picks[p.id];
+    let correctWinner = false;
+    if(attendees.has(p.id)) pts[p.id] += 1;
+    if(pick && actualWinner && (pick.winner||'').trim().toLowerCase() === actualWinner){
+      pts[p.id] += 1;
+      correctWinner = true;
+    }
+    if(pick && attendees.has(p.id) && correctWinner && actualScore !== null && actualScore !== undefined){
+      const diff = Math.abs(pick.score - actualScore);
+      if(diff < bestDiff){
+        bestDiff = diff;
+        eligibleForBonus.length = 0;
+        eligibleForBonus.push(p.id);
+      } else if(diff === bestDiff){
+        eligibleForBonus.push(p.id);
+      }
+    }
+  });
+
+  eligibleForBonus.forEach(id => pts[id] += 1);
+  return pts;
+}
+
+function seasonTotals(){
+  const totals = {};
+  config.players.forEach(p => totals[p.id] = 0);
+  for(let w=1; w<=NUM_WEEKS; w++){
+    if(season[w].locked){
+      const pts = computeWeekPoints(w);
+      config.players.forEach(p => totals[p.id] += pts[p.id]);
+    }
+  }
+  return totals;
+}
+
+// ---------- render ----------
+function render(){
+  const steps = [
+    ['renderTabsVisibility', renderTabsVisibility],
+    ['renderWhoAmI', renderWhoAmI],
+    ['renderWeek', renderWeek],
+    ['renderRosterStatus', renderRosterStatus],
+    ['renderResults', renderResults],
+    ['renderCommishGate', renderCommishGate],
+    ['renderStandings', renderStandings],
+    ['renderGrid', renderGrid],
+    ['renderSetup', renderSetup],
+  ];
+  steps.forEach(([name, fn])=>{
+    try{ fn(); }
+    catch(e){ console.error('render step failed:', name, e); }
+  });
+  try{
+    document.querySelector('header.marquee h1').textContent = config.label || "The Monday Night Pool";
+    document.querySelector('header.marquee .season').textContent = `${NUM_WEEKS} weeks \u00b7 winner + total score`;
+  }catch(e){ console.error('header render failed', e); }
+}
+
+function renderTabsVisibility(){
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.onclick = ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+    };
+  });
+}
+
+function renderWhoAmI(){
+  const sel = document.getElementById('whoAmI');
+  const prev = whoAmI;
+  sel.innerHTML = '<option value="">Select your name&hellip;</option>' +
+    config.players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  if(prev && config.players.some(p=>p.id===prev)){
+    sel.value = prev;
+  }
+  sel.onchange = ()=>{ whoAmI = sel.value || null; unlockedPlayerId = null; renderWeek(); };
+  whoAmI = sel.value || null;
+}
+
+function pinGateHtml(player){
+  const isNew = !player.pin;
+  return `
+    <p class="sub">${isNew
+      ? `First time picking as <strong>${escapeHtml(player.name)}</strong> — create a 4-digit PIN so only you can submit picks under your name.`
+      : `Enter your PIN to continue as <strong>${escapeHtml(player.name)}</strong>.`}</p>
+    <input type="password" id="pinInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="${isNew ? 'Choose a 4-digit PIN' : '4-digit PIN'}">
+    <button class="primary" id="pinSubmitBtn">${isNew ? 'Create PIN' : 'Continue'}</button>
+  `;
+}
+
+function wirePinGate(player){
+  const input = document.getElementById('pinInput');
+  const go = async ()=>{
+    const val = input.value.trim();
+    if(!/^\d{4}$/.test(val)){ toast('Enter a 4-digit PIN'); return; }
+    if(!player.pin){
+      player.pin = val;
+      await saveConfig();
+      unlockedPlayerId = whoAmI;
+      renderWeek();
+      toast('PIN created');
+    } else if(val === player.pin){
+      unlockedPlayerId = whoAmI;
+      renderWeek();
+    } else {
+      toast('Wrong PIN');
+    }
+  };
+  document.getElementById('pinSubmitBtn').onclick = go;
+  input.onkeydown = (e)=>{ if(e.key === 'Enter') go(); };
+  input.focus();
+}
+
+function renderWeek(){
+  const wk = season[currentWeek];
+  if(!wk.teams) wk.teams = ["",""];
+  let statusClass = 'open', statusText = 'Picks open';
+  if(wk.locked){ statusClass='final'; statusText='Final'; }
+  else if(picksLocked(currentWeek)){ statusClass='locked'; statusText='Locked — waiting on result'; }
+
+  document.getElementById('weekTitle').innerHTML = `Week ${currentWeek}
+    <span class="week-status ${statusClass}" id="weekStatus">${statusText}</span>`;
+  document.getElementById('prevWeek').disabled = currentWeek <= 1;
+  document.getElementById('nextWeek').disabled = currentWeek >= NUM_WEEKS;
+  document.getElementById('matchupLine').textContent =
+    (wk.teams[0] && wk.teams[1]) ? `${wk.teams[0]} @ ${wk.teams[1]}` : '';
+
+  const area = document.getElementById('pickArea');
+
+  if(!whoAmI){
+    area.innerHTML = `<p class="sub">Pick your name above to make or check a pick.</p>`;
+    return;
+  }
+
+  const player = config.players.find(p=>p.id===whoAmI);
+  if(!player) return;
+
+  if(unlockedPlayerId !== whoAmI){
+    area.innerHTML = pinGateHtml(player);
+    wirePinGate(player);
+    return;
+  }
+
+  const switchLink = `<button class="ghost" id="switchPlayerBtn" style="margin-bottom:14px;">Not ${escapeHtml(player.name)}? Switch</button>`;
+  const myPick = wk.picks[whoAmI];
+
+  if(wk.locked){
+    area.innerHTML = switchLink + `<p class="sub">This week is finalized &mdash; see the result below.</p>`;
+    wireSwitchLink();
+    return;
+  }
+
+  if(picksLocked(currentWeek)){
+    area.innerHTML = switchLink + (myPick
+      ? `<p class="sub">Picks are locked for kickoff. You picked <strong>${escapeHtml(myPick.winner)}</strong>, total score <strong>${myPick.score}</strong>.</p>`
+      : `<p class="sub">Picks are locked for kickoff and you didn't submit one in time.</p>`);
+    wireSwitchLink();
+    return;
+  }
+
+  if(myPick){
+    area.innerHTML = switchLink + `
+      <div class="pick-confirm">You picked <strong>${escapeHtml(myPick.winner)}</strong> with a total score of <strong>${myPick.score}</strong>.</div>
+      <button class="ghost" id="editPickBtn">Change my pick</button>
+    `;
+    wireSwitchLink();
+    document.getElementById('editPickBtn').onclick = ()=>{ area.innerHTML = switchLink + pickFormHtml(myPick, wk.teams); wireSwitchLink(); wirePickForm(); };
+    return;
+  }
+
+  area.innerHTML = switchLink + pickFormHtml(null, wk.teams);
+  wireSwitchLink();
+  wirePickForm();
+}
+
+function wireSwitchLink(){
+  const btn = document.getElementById('switchPlayerBtn');
+  if(btn) btn.onclick = ()=>{
+    whoAmI = null;
+    unlockedPlayerId = null;
+    document.getElementById('whoAmI').value = '';
+    renderWeek();
+  };
+}
+
+function pickFormHtml(existing, teams){
+  const hasTeams = teams && teams[0] && teams[1];
+  const winnerField = hasTeams
+    ? `<label for="winnerInput">Who wins Monday night?</label>
+       <select id="winnerInput">
+         <option value="">Select a team&hellip;</option>
+         <option value="${teams[0]}" ${existing && existing.winner===teams[0] ? 'selected':''}>${teams[0]}</option>
+         <option value="${teams[1]}" ${existing && existing.winner===teams[1] ? 'selected':''}>${teams[1]}</option>
+       </select>`
+    : `<label for="winnerInput">Who wins Monday night?</label>
+       <input type="text" id="winnerInput" placeholder="Team name (matchup not set yet)" value="${existing ? escapeHtml(existing.winner) : ''}">`;
+  return `
+    ${winnerField}
+    <label for="scoreInput">Total combined score (both teams)</label>
+    <input type="number" id="scoreInput" placeholder="e.g. 45" value="${existing ? existing.score : ''}">
+    <button class="primary" id="submitPickBtn">Save my pick</button>
+  `;
+}
+
+function wirePickForm(){
+  document.getElementById('submitPickBtn').onclick = async ()=>{
+    const winner = document.getElementById('winnerInput').value.trim();
+    const score = parseInt(document.getElementById('scoreInput').value, 10);
+    if(!winner){ toast('Enter a winner'); return; }
+    if(isNaN(score)){ toast('Enter a total score'); return; }
+    season[currentWeek].picks[whoAmI] = { winner, score, ts: Date.now() };
+    await saveSeason();
+    render();
+    toast('Pick saved');
+  };
+}
+
+function renderRosterStatus(){
+  const wk = season[currentWeek];
+  const panel = document.getElementById('rosterStatusPanel');
+  const sub = document.getElementById('rosterStatusSub');
+  const list = document.getElementById('rosterStatusList');
+
+  if(config.players.length === 0){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  if(wk.locked){
+    sub.textContent = "This week is final — see the result below for full picks.";
+    list.innerHTML = '';
+    return;
+  }
+
+  if(picksLocked(currentWeek)){
+    sub.textContent = "Kickoff has passed — picks are locked and now visible to everyone.";
+    list.innerHTML = config.players.map(p=>{
+      const pick = wk.picks[p.id];
+      return `<li><span>${escapeHtml(p.name)}</span><span>${pick ? escapeHtml(pick.winner)+' — '+pick.score : 'No pick submitted'}</span></li>`;
+    }).join('');
+    return;
+  }
+
+  sub.textContent = "Names show up here once they've submitted — picks stay hidden until kickoff.";
+  list.innerHTML = config.players.map(p=>{
+    const submitted = !!wk.picks[p.id];
+    return `<li><span><span class="dot ${submitted?'in':'out'}"></span>${escapeHtml(p.name)}</span><span>${submitted?'Picked':'Waiting'}</span></li>`;
+  }).join('');
+}
+
+function renderResults(){
+  const wk = season[currentWeek];
+  const panel = document.getElementById('resultsPanel');
+  if(!wk.locked || !wk.result){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  document.getElementById('resultsTitle').textContent = `Week ${currentWeek} result`;
+  document.getElementById('resultsSub').textContent =
+    `${wk.result.winner} won, total score ${wk.result.score}.`;
+
+  const pts = computeWeekPoints(currentWeek);
+  const rows = config.players.map(p=>{
+    const pick = wk.picks[p.id];
+    const attended = (wk.result.attendees||[]).includes(p.id);
+    return `<tr class="${pts[p.id]===3?'winner-row':''}">
+      <td>${escapeHtml(p.name)}</td>
+      <td>${pick ? escapeHtml(pick.winner) : '&mdash;'}</td>
+      <td class="num">${pick ? pick.score : '&mdash;'}</td>
+      <td>${attended ? 'Yes' : 'No'}</td>
+      <td class="num">${pts[p.id]}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('resultsTableWrap').innerHTML = `
+    <table class="picks-table">
+      <thead><tr><th>Player</th><th>Picked</th><th>Score guess</th><th>There</th><th>Points</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderCommishGate(){
+  const gateEl = document.getElementById('commishGate');
+  const unlockedArea = document.getElementById('commishUnlockedArea');
+
+  if(commishUnlocked){
+    gateEl.style.display = 'none';
+    unlockedArea.style.display = 'block';
+    renderPoolName();
+    renderSeasonLength();
+    renderCommishWeekNav();
+    renderCommish();
+    return;
+  }
+
+  gateEl.style.display = 'block';
+  unlockedArea.style.display = 'none';
+
+  const isNew = !config.commishPassword;
+  gateEl.innerHTML = `
+    <label for="commishPasswordInput">${isNew ? 'Set a password so only you can access this' : 'Commissioner password'}</label>
+    <input type="password" id="commishPasswordInput" placeholder="${isNew ? 'Choose a password' : 'Password'}">
+    <button class="primary" id="commishPasswordBtn">${isNew ? 'Set password' : 'Unlock'}</button>
+  `;
+  const go = async ()=>{
+    const val = document.getElementById('commishPasswordInput').value;
+    if(!val){ toast('Enter a password'); return; }
+    if(!config.commishPassword){
+      config.commishPassword = val;
+      await saveConfig();
+      commishUnlocked = true;
+      renderCommishGate();
+      toast('Commissioner password set');
+    } else if(val === config.commishPassword){
+      commishUnlocked = true;
+      renderCommishGate();
+    } else {
+      toast('Wrong password');
+    }
+  };
+  document.getElementById('commishPasswordBtn').onclick = go;
+  document.getElementById('commishPasswordInput').onkeydown = (e)=>{ if(e.key==='Enter') go(); };
+}
+
+function renderPoolName(){
+  const el = document.getElementById('poolNameArea');
+  el.innerHTML = `
+    <label for="poolLabelInput">Pool name (shown at the top of the app)</label>
+    <div class="row2">
+      <input type="text" id="poolLabelInput" value="${config.label === 'The Monday Night Pool' ? '' : escapeHtml(config.label||'')}" placeholder="The Monday Night Pool">
+      <button class="ghost" id="savePoolNameBtn">Save</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:0 0 18px;">
+  `;
+  document.getElementById('savePoolNameBtn').onclick = async ()=>{
+    const label = document.getElementById('poolLabelInput').value.trim();
+    config.label = label || "The Monday Night Pool";
+    await saveConfig();
+    render();
+    toast('Pool name saved');
+  };
+}
+
+function renderSeasonLength(){
+  const el = document.getElementById('seasonLengthArea');
+  el.innerHTML = `
+    <label for="numWeeksInput">Season length</label>
+    <div class="row2">
+      <input type="number" id="numWeeksInput" min="1" max="30" value="${NUM_WEEKS}">
+      <button class="ghost" id="saveNumWeeksBtn">Save</button>
+    </div>
+    <p class="note">Normally 17. For a doubleheader night, bump this up by 1 and enter the second game as its own extra week &mdash; same date, different kickoff time. It scores exactly the same as any other week.</p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
+  `;
+  document.getElementById('saveNumWeeksBtn').onclick = async ()=>{
+    const val = parseInt(document.getElementById('numWeeksInput').value, 10);
+    if(isNaN(val) || val < 1){ toast('Enter a valid number'); return; }
+    NUM_WEEKS = val;
+    config.numWeeks = val;
+    for(let w=1; w<=NUM_WEEKS; w++){
+      if(!season[w]) season[w] = emptyWeek();
+    }
+    if(commishWeek > NUM_WEEKS) commishWeek = NUM_WEEKS;
+    await saveConfig();
+    await saveSeason();
+    render();
+    toast('Season length saved');
+  };
+}
+
+function renderCommishWeekNav(){
+  document.getElementById('commishWeekTitle').textContent = `Week ${commishWeek}`;
+  document.getElementById('commishPrevWeek').disabled = commishWeek <= 1;
+  document.getElementById('commishNextWeek').disabled = commishWeek >= NUM_WEEKS;
+}
+
+function renderCommish(){
+  const body = document.getElementById('commishBody');
+  const wk = season[commishWeek];
+
+  if(wk.locked){
+    body.innerHTML = `
+      <p class="sub">Week ${commishWeek} is finalized.</p>
+      <button class="ghost" id="reopenBtn">Reopen this week</button>
+    `;
+    document.getElementById('reopenBtn').onclick = async ()=>{
+      season[commishWeek].locked = false;
+      await saveSeason();
+      render();
+      toast('Week reopened');
+    };
+    return;
+  }
+
+  const attendeeSet = new Set((wk.result && wk.result.attendees) || []);
+  const locked = picksLocked(commishWeek);
+  const teams = wk.teams || ["",""];
+  const hasTeams = teams[0] && teams[1];
+
+  const actualWinnerField = hasTeams
+    ? `<select id="actualWinner">
+         <option value="">Select a team&hellip;</option>
+         <option value="${teams[0]}" ${wk.result && wk.result.winner===teams[0] ? 'selected':''}>${teams[0]}</option>
+         <option value="${teams[1]}" ${wk.result && wk.result.winner===teams[1] ? 'selected':''}>${teams[1]}</option>
+       </select>`
+    : `<input type="text" id="actualWinner" placeholder="Team name" value="${wk.result ? escapeHtml(wk.result.winner) : ''}">`;
+
+  body.innerHTML = `
+    <label for="teamASelect">Monday night matchup</label>
+    <div class="row2">
+      <select id="teamASelect">
+        <option value="">Team A</option>
+        ${NFL_TEAMS.map(t=>`<option value="${t}" ${teams[0]===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <select id="teamBSelect">
+        <option value="">Team B</option>
+        ${NFL_TEAMS.map(t=>`<option value="${t}" ${teams[1]===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>
+    <button class="ghost" id="saveMatchupBtn" style="margin-bottom:14px;">Save matchup</button>
+    <hr style="border:none;border-top:1px solid var(--line);margin:0 0 18px;">
+    <label for="kickoffInput">Kickoff time (picks lock automatically at this time)</label>
+    <input type="datetime-local" id="kickoffInput" value="${wk.kickoff ? toDatetimeLocalValue(wk.kickoff) : ''}">
+    <div class="row2">
+      <button class="ghost" id="saveKickoffBtn">Save kickoff time</button>
+      <button class="ghost" id="manualLockBtn">${wk.manualLock ? 'Unlock picks' : 'Lock picks now'}</button>
+    </div>
+    <p class="note">${locked ? 'Picks are currently locked and visible to everyone.' : 'Picks are still open and hidden from other players.'}</p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
+    <label for="actualWinner">Actual winner</label>
+    ${actualWinnerField}
+    <label for="actualScore">Actual total score</label>
+    <input type="number" id="actualScore" placeholder="e.g. 44" value="${wk.result ? wk.result.score : ''}">
+    <label>Who was there</label>
+    <div class="checklist" id="attendeeChecklist">
+      ${config.players.map(p=>`
+        <label><input type="checkbox" data-pid="${p.id}" ${attendeeSet.has(p.id)?'checked':''}> ${escapeHtml(p.name)}</label>
+      `).join('')}
+    </div>
+    <button class="primary" id="finalizeBtn">Finalize week ${commishWeek}</button>
+    <p class="note">This locks picks, scores the week, and adds it to the season standings.</p>
+  `;
+
+  document.getElementById('saveMatchupBtn').onclick = async ()=>{
+    const a = document.getElementById('teamASelect').value;
+    const b = document.getElementById('teamBSelect').value;
+    if(!a || !b){ toast('Select both teams first'); return; }
+    if(a === b){ toast('Pick two different teams'); return; }
+    season[commishWeek].teams = [a, b];
+    const ok = await saveSeason();
+    render();
+    if(ok) toast(`Week ${commishWeek} matchup saved`);
+  };
+
+  document.getElementById('saveKickoffBtn').onclick = async ()=>{
+    const val = document.getElementById('kickoffInput').value;
+    season[commishWeek].kickoff = val ? new Date(val).toISOString() : null;
+    await saveSeason();
+    render();
+    toast(val ? 'Kickoff time saved' : 'Kickoff time cleared');
+  };
+
+  document.getElementById('manualLockBtn').onclick = async ()=>{
+    season[commishWeek].manualLock = !season[commishWeek].manualLock;
+    await saveSeason();
+    render();
+    toast(season[commishWeek].manualLock ? 'Picks locked' : 'Picks unlocked');
+  };
+
+  document.getElementById('finalizeBtn').onclick = async ()=>{
+    const winner = document.getElementById('actualWinner').value.trim();
+    const score = parseInt(document.getElementById('actualScore').value, 10);
+    if(!winner){ toast('Enter the actual winner'); return; }
+    if(isNaN(score)){ toast('Enter the actual score'); return; }
+    const attendees = Array.from(document.querySelectorAll('#attendeeChecklist input:checked')).map(cb=>cb.dataset.pid);
+
+    season[commishWeek].result = { winner, score, attendees };
+    season[commishWeek].locked = true;
+    await saveSeason();
+    render();
+    toast(`Week ${commishWeek} finalized`);
+  };
+}
+
+function renderStandings(){
+  const wrap = document.getElementById('standingsWrap');
+  if(config.players.length === 0){
+    wrap.innerHTML = `<p class="empty">Add players in Setup to get started.</p>`;
+    return;
+  }
+  const totals = seasonTotals();
+  const ranked = [...config.players].sort((a,b)=> totals[b.id]-totals[a.id]);
+
+  wrap.innerHTML = `
+    <table class="standings-table">
+      <thead><tr><th></th><th>Player</th><th style="text-align:right;">Points</th></tr></thead>
+      <tbody>
+        ${ranked.map((p,i)=>`
+          <tr>
+            <td class="rank">${i+1}</td>
+            <td>${escapeHtml(p.name)}</td>
+            <td class="pts">${totals[p.id]}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderGrid(){
+  const wrap = document.getElementById('gridWrap');
+  if(config.players.length === 0){
+    wrap.innerHTML = '';
+    return;
+  }
+  const totals = seasonTotals();
+  let head = '<tr><th style="text-align:left;">Player</th>';
+  for(let w=1; w<=NUM_WEEKS; w++) head += `<th>W${w}</th>`;
+  head += '<th>Total</th></tr>';
+
+  let rows = '';
+  config.players.forEach(p=>{
+    rows += `<tr><td class="name">${escapeHtml(p.name)}</td>`;
+    for(let w=1; w<=NUM_WEEKS; w++){
+      if(season[w].locked){
+        const pts = computeWeekPoints(w);
+        rows += `<td>${pts[p.id]}</td>`;
+      } else {
+        rows += `<td>&mdash;</td>`;
+      }
+    }
+    rows += `<td class="tot">${totals[p.id]}</td></tr>`;
+  });
+
+  wrap.innerHTML = `<table class="grid"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderSetup(){
+  const edit = document.getElementById('rosterEdit');
+  edit.innerHTML = config.players.map((p,i)=>`
+    <div class="roster-edit-row">
+      <input type="text" data-idx="${i}" class="playerNameInput" value="${escapeHtml(p.name)}" placeholder="Player name">
+      <span class="pin-tag">${p.pin ? 'PIN set' : 'No PIN yet'}</span>
+      <button data-idx="${i}" class="resetPinBtn" title="Reset PIN">PIN</button>
+      <button data-idx="${i}" class="removePlayerBtn" title="Remove">&times;</button>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.playerNameInput').forEach(inp=>{
+    inp.onchange = async ()=>{
+      config.players[inp.dataset.idx].name = inp.value.trim();
+      await saveConfig();
+    };
+  });
+  document.querySelectorAll('.removePlayerBtn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      config.players.splice(btn.dataset.idx, 1);
+      await saveConfig();
+      render();
+    };
+  });
+  document.querySelectorAll('.resetPinBtn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      config.players[btn.dataset.idx].pin = null;
+      await saveConfig();
+      render();
+      toast('PIN reset — they can set a new one next time');
+    };
+  });
+
+}
+
+function escapeHtml(str){
+  return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+document.getElementById('prevWeek').onclick = ()=>{ if(currentWeek>1){ currentWeek--; render(); } };
+document.getElementById('nextWeek').onclick = ()=>{ if(currentWeek<NUM_WEEKS){ currentWeek++; render(); } };
+
+document.getElementById('commishPrevWeek').onclick = ()=>{ if(commishWeek>1){ commishWeek--; renderCommishWeekNav(); renderCommish(); } };
+document.getElementById('commishNextWeek').onclick = ()=>{ if(commishWeek<NUM_WEEKS){ commishWeek++; renderCommishWeekNav(); renderCommish(); } };
+
+document.getElementById('addPlayerBtn').onclick = async ()=>{
+  const id = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+  config.players.push({ id, name: '', pin: null });
+  await saveConfig();
+  render();
+  const inputs = document.querySelectorAll('.playerNameInput');
+  if(inputs.length) inputs[inputs.length-1].focus();
+};
+
+loadAll();
+</script>
+</body>
+</html>
