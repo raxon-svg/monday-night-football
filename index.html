@@ -309,7 +309,7 @@
   <section id="tab-setup">
     <div class="panel" id="commishPanel">
       <h2>Commissioner tools</h2>
-      <p class="sub">Matchups, kickoff times, and results. Password-protected &mdash; only you should have this.</p>
+      <p class="sub">Matchups, kickoff times, results, and the player roster. Password-protected &mdash; only you should have this.</p>
       <div id="commishGate"></div>
       <div id="commishUnlockedArea" style="display:none;">
         <div id="poolNameArea"></div>
@@ -320,14 +320,9 @@
           <button id="commishNextWeek">&rarr;</button>
         </div>
         <div id="commishBody"></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
+        <div id="rosterEditArea"></div>
       </div>
-    </div>
-    <div class="panel">
-      <h2>Players</h2>
-      <p class="sub">Add everyone in the pool. This list is what fills the "Who are you?" menu &mdash; anyone can add themselves here.</p>
-      <div id="rosterEdit"></div>
-      <button class="ghost" id="addPlayerBtn">+ Add player</button>
-      <p class="note">Everyone who opens this app sees the same players, picks, and standings &mdash; there's no login for this part, so it works on the honor system.</p>
     </div>
   </section>
 
@@ -353,6 +348,18 @@ async function kvSet(key, value){
   if(error){ console.error(error); return false; }
   return true;
 }
+
+// Atomic, race-safe write: calls a Postgres function that patches only the
+// one field being changed, instead of overwriting the whole blob. Use this
+// for anything multiple people might do around the same time (picks, PINs,
+// roster changes, commissioner actions) instead of saveConfig()/saveSeason().
+async function kvRpc(fn, args){
+  try{
+    const { error } = await withTimeout(sb.rpc(fn, args), 6000);
+    if(error){ console.error(fn, error); toast('Save failed — try again'); return false; }
+    return true;
+  }catch(e){ console.error(fn+' failed', e); toast('Save failed — try again'); return false; }
+}
 // ==== End Supabase connection ====
 
 let NUM_WEEKS = 17;
@@ -362,6 +369,17 @@ let currentWeek = 1;
 let whoAmI = null;
 let unlockedPlayerId = null;
 let commishWeek = 1;
+// Draft of "who was there" checkboxes, kept separate from server data so the
+// 5-second background refresh can't wipe out clicks made before Finalize is
+// pressed. Cleared once that week is actually finalized (or reopened).
+let attendeeDraft = {}; // { weekNum: Set(playerIds) }
+function getAttendeeDraft(w){
+  if(!attendeeDraft[w]){
+    const wk = season[w];
+    attendeeDraft[w] = new Set((wk.result && wk.result.attendees) || []);
+  }
+  return attendeeDraft[w];
+}
 let commishUnlocked = false;
 
 const NFL_TEAMS = [
@@ -598,8 +616,9 @@ function wirePinGate(player){
     const val = input.value.trim();
     if(!/^\d{4}$/.test(val)){ toast('Enter a 4-digit PIN'); return; }
     if(!player.pin){
+      const ok = await kvRpc('kv_update_player_field', { p_id: player.id, p_field: 'pin', p_value: val });
+      if(!ok) return;
       player.pin = val;
-      await saveConfig();
       unlockedPlayerId = whoAmI;
       renderWeek();
       toast('PIN created');
@@ -712,8 +731,14 @@ function wirePickForm(){
     const score = parseInt(document.getElementById('scoreInput').value, 10);
     if(!winner){ toast('Enter a winner'); return; }
     if(isNaN(score)){ toast('Enter a total score'); return; }
-    season[currentWeek].picks[whoAmI] = { winner, score, ts: Date.now() };
-    await saveSeason();
+    const pick = { winner, score, ts: Date.now() };
+    const ok = await kvRpc('kv_merge_path', {
+      p_key: 'season-data',
+      p_path: [String(currentWeek), 'picks', whoAmI],
+      p_value: pick
+    });
+    if(!ok) return;
+    season[currentWeek].picks[whoAmI] = pick;
     render();
     toast('Pick saved');
   };
@@ -891,15 +916,17 @@ function renderCommish(){
       <button class="ghost" id="reopenBtn">Reopen this week</button>
     `;
     document.getElementById('reopenBtn').onclick = async ()=>{
+      const ok = await kvRpc('kv_merge_path', { p_key: 'season-data', p_path: [String(commishWeek), 'locked'], p_value: false });
+      if(!ok) return;
       season[commishWeek].locked = false;
-      await saveSeason();
+      delete attendeeDraft[commishWeek];
       render();
       toast('Week reopened');
     };
     return;
   }
 
-  const attendeeSet = new Set((wk.result && wk.result.attendees) || []);
+  const attendeeSet = getAttendeeDraft(commishWeek);
   const locked = picksLocked(commishWeek);
   const teams = wk.teams || ["",""];
   const hasTeams = teams[0] && teams[1];
@@ -948,30 +975,41 @@ function renderCommish(){
     <p class="note">This locks picks, scores the week, and adds it to the season standings.</p>
   `;
 
+  document.querySelectorAll('#attendeeChecklist input[type=checkbox]').forEach(cb=>{
+    cb.onchange = ()=>{
+      const pid = cb.dataset.pid;
+      if(cb.checked) attendeeSet.add(pid); else attendeeSet.delete(pid);
+    };
+  });
+
   document.getElementById('saveMatchupBtn').onclick = async ()=>{
     const a = document.getElementById('teamASelect').value;
     const b = document.getElementById('teamBSelect').value;
     if(!a || !b){ toast('Select both teams first'); return; }
     if(a === b){ toast('Pick two different teams'); return; }
-    season[commishWeek].teams = [a, b];
-    const ok = await saveSeason();
+    const ok = await kvRpc('kv_merge_path', { p_key: 'season-data', p_path: [String(commishWeek), 'teams'], p_value: [a, b] });
+    if(ok){ season[commishWeek].teams = [a, b]; }
     render();
     if(ok) toast(`Week ${commishWeek} matchup saved`);
   };
 
   document.getElementById('saveKickoffBtn').onclick = async ()=>{
     const val = document.getElementById('kickoffInput').value;
-    season[commishWeek].kickoff = val ? new Date(val).toISOString() : null;
-    await saveSeason();
+    const iso = val ? new Date(val).toISOString() : null;
+    const ok = await kvRpc('kv_merge_path', { p_key: 'season-data', p_path: [String(commishWeek), 'kickoff'], p_value: iso });
+    if(!ok) return;
+    season[commishWeek].kickoff = iso;
     render();
     toast(val ? 'Kickoff time saved' : 'Kickoff time cleared');
   };
 
   document.getElementById('manualLockBtn').onclick = async ()=>{
-    season[commishWeek].manualLock = !season[commishWeek].manualLock;
-    await saveSeason();
+    const newVal = !season[commishWeek].manualLock;
+    const ok = await kvRpc('kv_merge_path', { p_key: 'season-data', p_path: [String(commishWeek), 'manualLock'], p_value: newVal });
+    if(!ok) return;
+    season[commishWeek].manualLock = newVal;
     render();
-    toast(season[commishWeek].manualLock ? 'Picks locked' : 'Picks unlocked');
+    toast(newVal ? 'Picks locked' : 'Picks unlocked');
   };
 
   document.getElementById('finalizeBtn').onclick = async ()=>{
@@ -979,11 +1017,14 @@ function renderCommish(){
     const score = parseInt(document.getElementById('actualScore').value, 10);
     if(!winner){ toast('Enter the actual winner'); return; }
     if(isNaN(score)){ toast('Enter the actual score'); return; }
-    const attendees = Array.from(document.querySelectorAll('#attendeeChecklist input:checked')).map(cb=>cb.dataset.pid);
+    const attendees = Array.from(attendeeSet);
+    const result = { winner, score, attendees };
 
-    season[commishWeek].result = { winner, score, attendees };
+    const ok = await kvRpc('kv_finalize_week', { p_week: String(commishWeek), p_result: result, p_locked: true });
+    if(!ok) return;
+    season[commishWeek].result = result;
     season[commishWeek].locked = true;
-    await saveSeason();
+    delete attendeeDraft[commishWeek];
     render();
     toast(`Week ${commishWeek} finalized`);
   };
@@ -1043,38 +1084,69 @@ function renderGrid(){
 }
 
 function renderSetup(){
-  const edit = document.getElementById('rosterEdit');
-  edit.innerHTML = config.players.map((p,i)=>`
-    <div class="roster-edit-row">
-      <input type="text" data-idx="${i}" class="playerNameInput" value="${escapeHtml(p.name)}" placeholder="Player name">
-      <span class="pin-tag">${p.pin ? 'PIN set' : 'No PIN yet'}</span>
-      <button data-idx="${i}" class="resetPinBtn" title="Reset PIN">PIN</button>
-      <button data-idx="${i}" class="removePlayerBtn" title="Remove">&times;</button>
+  const area = document.getElementById('rosterEditArea');
+  if(!commishUnlocked){
+    area.innerHTML = '';
+    return;
+  }
+
+  area.innerHTML = `
+    <h2>Players</h2>
+    <p class="sub">Add, rename, or remove players. This list is what fills the "Who are you?" menu on the main page &mdash; players themselves only pick their name and enter their PIN, they can't get in here.</p>
+    <div id="rosterEdit">
+      ${config.players.map((p,i)=>`
+        <div class="roster-edit-row">
+          <input type="text" data-idx="${i}" class="playerNameInput" value="${escapeHtml(p.name)}" placeholder="Player name">
+          <span class="pin-tag">${p.pin ? 'PIN set' : 'No PIN yet'}</span>
+          <button data-idx="${i}" class="resetPinBtn" title="Reset PIN">PIN</button>
+          <button data-idx="${i}" class="removePlayerBtn" title="Remove">&times;</button>
+        </div>
+      `).join('')}
     </div>
-  `).join('');
+    <button class="ghost" id="addPlayerBtn">+ Add player</button>
+    <p class="note">Resetting a PIN only clears that PIN &mdash; it never touches picks or season points. Removing a player is permanent and takes their name out of the picker; you'll be asked to confirm first.</p>
+  `;
 
   document.querySelectorAll('.playerNameInput').forEach(inp=>{
     inp.onchange = async ()=>{
-      config.players[inp.dataset.idx].name = inp.value.trim();
-      await saveConfig();
+      const name = inp.value.trim();
+      const id = config.players[inp.dataset.idx].id;
+      const ok = await kvRpc('kv_update_player_field', { p_id: id, p_field: 'name', p_value: name });
+      if(!ok) return;
+      config.players[inp.dataset.idx].name = name;
     };
   });
   document.querySelectorAll('.removePlayerBtn').forEach(btn=>{
     btn.onclick = async ()=>{
-      config.players.splice(btn.dataset.idx, 1);
-      await saveConfig();
+      const idx = btn.dataset.idx;
+      const player = config.players[idx];
+      if(!confirm(`Remove ${player.name || 'this player'} from the pool? Their past picks stay in the data, but they'll disappear from the roster and standings. This can't be undone from here.`)) return;
+      const ok = await kvRpc('kv_remove_player', { p_id: player.id });
+      if(!ok) return;
+      config.players.splice(idx, 1);
       render();
     };
   });
   document.querySelectorAll('.resetPinBtn').forEach(btn=>{
     btn.onclick = async ()=>{
+      const id = config.players[btn.dataset.idx].id;
+      const ok = await kvRpc('kv_update_player_field', { p_id: id, p_field: 'pin', p_value: null });
+      if(!ok) return;
       config.players[btn.dataset.idx].pin = null;
-      await saveConfig();
       render();
-      toast('PIN reset — they can set a new one next time');
+      toast('PIN reset — their picks and points are untouched, they just set a new PIN next time');
     };
   });
 
+  document.getElementById('addPlayerBtn').onclick = async ()=>{
+    const id = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+    const ok = await kvRpc('kv_add_player', { p_id: id, p_name: '' });
+    if(!ok) return;
+    config.players.push({ id, name: '', pin: null });
+    render();
+    const inputs = document.querySelectorAll('.playerNameInput');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  };
 }
 
 function escapeHtml(str){
@@ -1086,15 +1158,6 @@ document.getElementById('nextWeek').onclick = ()=>{ if(currentWeek<NUM_WEEKS){ c
 
 document.getElementById('commishPrevWeek').onclick = ()=>{ if(commishWeek>1){ commishWeek--; renderCommishWeekNav(); renderCommish(); } };
 document.getElementById('commishNextWeek').onclick = ()=>{ if(commishWeek<NUM_WEEKS){ commishWeek++; renderCommishWeekNav(); renderCommish(); } };
-
-document.getElementById('addPlayerBtn').onclick = async ()=>{
-  const id = 'p_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-  config.players.push({ id, name: '', pin: null });
-  await saveConfig();
-  render();
-  const inputs = document.querySelectorAll('.playerNameInput');
-  if(inputs.length) inputs[inputs.length-1].focus();
-};
 
 loadAll();
 </script>
