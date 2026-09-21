@@ -427,9 +427,10 @@ function withTimeout(promise, ms){
 }
 
 async function fetchData(){
+  let configOk = false, seasonOk = false;
   try{
-    const cfgVal = await withTimeout(kvGet('pool-config'), 6000);
-    if(cfgVal){ config = cfgVal; }
+    const cfgVal = await withTimeout(kvGet('pool-config'), 8000);
+    if(cfgVal){ config = cfgVal; configOk = true; }
   }catch(e){ console.error('fetch config failed or timed out', e); }
 
   if(config.commishPassword === undefined) config.commishPassword = null;
@@ -437,8 +438,8 @@ async function fetchData(){
   NUM_WEEKS = config.numWeeks;
 
   try{
-    const seasonVal = await withTimeout(kvGet('season-data'), 6000);
-    if(seasonVal){ season = seasonVal; }
+    const seasonVal = await withTimeout(kvGet('season-data'), 8000);
+    if(seasonVal){ season = seasonVal; seasonOk = true; }
   }catch(e){ console.error('fetch season failed or timed out', e); }
 
   for(let w=1; w<=NUM_WEEKS; w++){
@@ -448,6 +449,8 @@ async function fetchData(){
     if(!season[w].teams) season[w].teams = ["",""];
   }
   config.players.forEach(p=>{ if(p.pin === undefined) p.pin = null; });
+
+  return { configOk, seasonOk };
 }
 
 async function loadAll(){
@@ -455,7 +458,18 @@ async function loadAll(){
   // so the app is never inert even if the storage fetch below stalls.
   renderTabsVisibility();
 
-  await fetchData();
+  let result = await fetchData();
+  let attempts = 1;
+  while((!result.configOk || !result.seasonOk) && attempts < 3){
+    await new Promise(r=>setTimeout(r, 1200));
+    result = await fetchData();
+    attempts++;
+  }
+
+  if(!result.configOk || !result.seasonOk){
+    showLoadError();
+    return;
+  }
 
   // jump to first non-locked week by default
   let firstOpen = NUM_WEEKS;
@@ -466,6 +480,17 @@ async function loadAll(){
 
   render();
   startAutoRefresh();
+}
+
+function showLoadError(){
+  document.querySelector('.wrap').innerHTML = `
+    <div class="panel" style="text-align:center;">
+      <h2>Couldn't load the pool</h2>
+      <p class="sub">Your picks and standings are safe on the server &mdash; this device just couldn't reach them. Check your connection and try again.</p>
+      <button class="primary" id="retryLoadBtn">Retry</button>
+    </div>
+  `;
+  document.getElementById('retryLoadBtn').onclick = ()=>{ location.reload(); };
 }
 
 function startAutoRefresh(){
@@ -587,15 +612,20 @@ function renderTabsVisibility(){
   });
 }
 
+let lastRosterSignature = null;
 function renderWhoAmI(){
   const sel = document.getElementById('whoAmI');
   const prev = whoAmI;
-  sel.innerHTML = '<option value="">Select your name&hellip;</option>' +
-    config.players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  const sig = config.players.map(p=>p.id+'|'+p.name).join(',');
+  if(sig !== lastRosterSignature){
+    sel.innerHTML = '<option value="">Select your name&hellip;</option>' +
+      config.players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    lastRosterSignature = sig;
+  }
   if(prev && config.players.some(p=>p.id===prev)){
     sel.value = prev;
   }
-  sel.onchange = ()=>{ whoAmI = sel.value || null; unlockedPlayerId = null; renderWeek(); };
+  sel.onchange = sel.oninput = ()=>{ whoAmI = sel.value || null; unlockedPlayerId = null; renderWeek(); };
   whoAmI = sel.value || null;
 }
 
