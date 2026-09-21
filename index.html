@@ -448,6 +448,7 @@ async function fetchData(){
     if(season[w].manualLock === undefined) season[w].manualLock = false;
     if(!season[w].teams) season[w].teams = ["",""];
   }
+  config.players = (config.players || []).filter(p => p && p.id);
   config.players.forEach(p=>{ if(p.pin === undefined) p.pin = null; });
 
   return { configOk, seasonOk };
